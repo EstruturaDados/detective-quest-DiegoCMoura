@@ -1,46 +1,303 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <locale.h>
+#include <windows.h>
 
 // Desafio Detective Quest
 // Tema 4 - Árvores e Tabela Hash
-// Este código inicial serve como base para o desenvolvimento das estruturas de navegação, pistas e suspeitos.
-// Use as instruções de cada região para desenvolver o sistema completo com árvore binária, árvore de busca e tabela hash.
+// Sistema completo de detetive com árvore binária, árvore de busca e tabela hash
+
+// ===== ESTRUTURAS =====
+
+// 🌱 Nível Novato: Estrutura para navegação na mansão
+typedef struct Sala {
+    char nome[50];
+    struct Sala* esquerda;
+    struct Sala* direita;
+} Sala;
+
+// 🔍 Nível Aventureiro: Estrutura para pistas
+typedef struct Pista {
+    char texto[100];
+    struct Pista* esquerda;
+    struct Pista* direita;
+} Pista;
+
+// 🧠 Nível Mestre: Estrutura para suspeitos
+typedef struct NoListaPista {
+    char pista[100];
+    struct NoListaPista* proximo;
+} NoListaPista;
+
+typedef struct Suspeito {
+    char nome[50];
+    NoListaPista* pistas;
+    int contador;
+} Suspeito;
+
+typedef struct NoHash {
+    Suspeito suspeito;
+    struct NoHash* proximo;
+} NoHash;
+
+// ===== FUNÇÕES PARA ÁRVORE BINÁRIA (SALAS) =====
+
+Sala* criarSala(char* nome) {
+    Sala* novaSala = (Sala*)malloc(sizeof(Sala));
+    strcpy(novaSala->nome, nome);
+    novaSala->esquerda = NULL;
+    novaSala->direita = NULL;
+    return novaSala;
+}
+
+void conectarSalas(Sala* pai, Sala* esquerda, Sala* direita) {
+    if (pai) {
+        pai->esquerda = esquerda;
+        pai->direita = direita;
+    }
+}
+
+void explorarSalas(Sala* salaAtual) {
+    if (!salaAtual) return;
+    
+    printf("\n[LOCAL] Voce esta na: %s\n", salaAtual->nome);
+    printf("Opcoes: (e) esquerda, (d) direita, (s) sair\n");
+    
+    char opcao;
+    printf("Escolha: ");
+    scanf(" %c", &opcao);
+    
+    switch(opcao) {
+        case 'e':
+            if (salaAtual->esquerda) {
+                explorarSalas(salaAtual->esquerda);
+            } else {
+                printf("Nao ha saida a esquerda!\n");
+                explorarSalas(salaAtual);
+            }
+            break;
+        case 'd':
+            if (salaAtual->direita) {
+                explorarSalas(salaAtual->direita);
+            } else {
+                printf("Nao ha saida a direita!\n");
+                explorarSalas(salaAtual);
+            }
+            break;
+        case 's':
+            printf("Saindo da exploração...\n");
+            return;
+        default:
+            printf("Opcao invalida!\n");
+            explorarSalas(salaAtual);
+    }
+}
+
+// ===== FUNÇÕES PARA ÁRVORE DE BUSCA (PISTAS) =====
+
+Pista* inserirPista(Pista* raiz, char* texto) {
+    if (!raiz) {
+        Pista* novaPista = (Pista*)malloc(sizeof(Pista));
+        strcpy(novaPista->texto, texto);
+        novaPista->esquerda = NULL;
+        novaPista->direita = NULL;
+        return novaPista;
+    }
+    
+    int comparacao = strcmp(texto, raiz->texto);
+    if (comparacao < 0) {
+        raiz->esquerda = inserirPista(raiz->esquerda, texto);
+    } else if (comparacao > 0) {
+        raiz->direita = inserirPista(raiz->direita, texto);
+    }
+    
+    return raiz;
+}
+
+void listarPistas(Pista* raiz) {
+    if (raiz) {
+        listarPistas(raiz->esquerda);
+        printf("[PISTA] %s\n", raiz->texto);
+        listarPistas(raiz->direita);
+    }
+}
+
+// ===== FUNÇÕES PARA TABELA HASH (SUSPEITOS) =====
+
+#define TAMANHO_HASH 10
+
+NoHash* tabelaHash[TAMANHO_HASH];
+
+void inicializarHash() {
+    for (int i = 0; i < TAMANHO_HASH; i++) {
+        tabelaHash[i] = NULL;
+    }
+}
+
+int calcularHash(char* nome) {
+    int soma = 0;
+    for (int i = 0; nome[i] != '\0'; i++) {
+        soma += nome[i];
+    }
+    return soma % TAMANHO_HASH;
+}
+
+NoHash* buscarSuspeito(char* nome) {
+    int indice = calcularHash(nome);
+    NoHash* atual = tabelaHash[indice];
+    
+    while (atual) {
+        if (strcmp(atual->suspeito.nome, nome) == 0) {
+            return atual;
+        }
+        atual = atual->proximo;
+    }
+    return NULL;
+}
+
+void inserirHash(char* pista, char* nomeSuspeito) {
+    int indice = calcularHash(nomeSuspeito);
+    NoHash* no = buscarSuspeito(nomeSuspeito);
+    
+    if (!no) {
+        // Criar novo suspeito
+        no = (NoHash*)malloc(sizeof(NoHash));
+        strcpy(no->suspeito.nome, nomeSuspeito);
+        no->suspeito.pistas = NULL;
+        no->suspeito.contador = 0;
+        no->proximo = tabelaHash[indice];
+        tabelaHash[indice] = no;
+    }
+    
+    // Adicionar pista à lista do suspeito
+    NoListaPista* novaPista = (NoListaPista*)malloc(sizeof(NoListaPista));
+    strcpy(novaPista->pista, pista);
+    novaPista->proximo = no->suspeito.pistas;
+    no->suspeito.pistas = novaPista;
+    no->suspeito.contador++;
+}
+
+void listarAssociacoes() {
+    printf("\n[RELATORIO] ASSOCIACOES DE PISTAS COM SUSPEITOS:\n");
+    printf("==========================================\n");
+    
+    for (int i = 0; i < TAMANHO_HASH; i++) {
+        NoHash* atual = tabelaHash[i];
+        while (atual) {
+            printf("\n[SUSPEITO] %s (Pistas: %d)\n", atual->suspeito.nome, atual->suspeito.contador);
+            NoListaPista* pistaAtual = atual->suspeito.pistas;
+            while (pistaAtual) {
+                printf("   [PISTA] %s\n", pistaAtual->pista);
+                pistaAtual = pistaAtual->proximo;
+            }
+            atual = atual->proximo;
+        }
+    }
+}
+
+void encontrarSuspeitoMaisProvavel() {
+    char* nomeMaisProvavel = NULL;
+    int maxContador = 0;
+    
+    for (int i = 0; i < TAMANHO_HASH; i++) {
+        NoHash* atual = tabelaHash[i];
+        while (atual) {
+            if (atual->suspeito.contador > maxContador) {
+                maxContador = atual->suspeito.contador;
+                nomeMaisProvavel = atual->suspeito.nome;
+            }
+            atual = atual->proximo;
+        }
+    }
+    
+    if (nomeMaisProvavel) {
+        printf("\n[RESULTADO] SUSPEITO MAIS PROVAVEL: %s (%d pistas associadas)\n", nomeMaisProvavel, maxContador);
+    } else {
+        printf("\n[ERRO] Nenhum suspeito encontrado.\n");
+    }
+}
+
+// ===== FUNÇÃO PRINCIPAL =====
 
 int main() {
-
-    // 🌱 Nível Novato: Mapa da Mansão com Árvore Binária
-    //
-    // - Crie uma struct Sala com nome, e dois ponteiros: esquerda e direita.
-    // - Use funções como criarSala(), conectarSalas() e explorarSalas().
-    // - A árvore pode ser fixa: Hall de Entrada, Biblioteca, Cozinha, Sótão etc.
-    // - O jogador deve poder explorar indo à esquerda (e) ou à direita (d).
-    // - Finalize a exploração com uma opção de saída (s).
-    // - Exiba o nome da sala a cada movimento.
-    // - Use recursão ou laços para caminhar pela árvore.
-    // - Nenhuma inserção dinâmica é necessária neste nível.
-
-    // 🔍 Nível Aventureiro: Armazenamento de Pistas com Árvore de Busca
-    //
-    // - Crie uma struct Pista com campo texto (string).
-    // - Crie uma árvore binária de busca (BST) para inserir as pistas coletadas.
-    // - Ao visitar salas específicas, adicione pistas automaticamente com inserirBST().
-    // - Implemente uma função para exibir as pistas em ordem alfabética (emOrdem()).
-    // - Utilize alocação dinâmica e comparação de strings (strcmp) para organizar.
-    // - Não precisa remover ou balancear a árvore.
-    // - Use funções para modularizar: inserirPista(), listarPistas().
-    // - A árvore de pistas deve ser exibida quando o jogador quiser revisar evidências.
-
-    // 🧠 Nível Mestre: Relacionamento de Pistas com Suspeitos via Hash
-    //
-    // - Crie uma struct Suspeito contendo nome e lista de pistas associadas.
-    // - Crie uma tabela hash (ex: array de ponteiros para listas encadeadas).
-    // - A chave pode ser o nome do suspeito ou derivada das pistas.
-    // - Implemente uma função inserirHash(pista, suspeito) para registrar relações.
-    // - Crie uma função para mostrar todos os suspeitos e suas respectivas pistas.
-    // - Adicione um contador para saber qual suspeito foi mais citado.
-    // - Exiba ao final o “suspeito mais provável” baseado nas pistas coletadas.
-    // - Para hashing simples, pode usar soma dos valores ASCII do nome ou primeira letra.
-    // - Em caso de colisão, use lista encadeada para tratar.
-    // - Modularize com funções como inicializarHash(), buscarSuspeito(), listarAssociacoes().
+    // Configurar codificação UTF-8 para Windows
+    SetConsoleOutputCP(CP_UTF8);
+    setlocale(LC_ALL, "Portuguese_Brazil.utf8");
+    
+    printf("DETECTIVE QUEST - SISTEMA COMPLETO\n");
+    printf("=====================================\n");
+    
+    // Inicializar tabela hash
+    inicializarHash();
+    
+    // Nivel Novato: Criar mapa da mansao
+    printf("\n[1] CRIANDO MAPA DA MANSAO...\n");
+    
+    Sala* hallEntrada = criarSala("Hall de Entrada");
+    Sala* biblioteca = criarSala("Biblioteca");
+    Sala* cozinha = criarSala("Cozinha");
+    Sala* sotao = criarSala("Sotao");
+    Sala* quarto = criarSala("Quarto Principal");
+    Sala* jardim = criarSala("Jardim");
+    
+    conectarSalas(hallEntrada, biblioteca, cozinha);
+    conectarSalas(biblioteca, sotao, quarto);
+    conectarSalas(cozinha, jardim, NULL);
+    
+    // Nivel Aventureiro: Arvore de pistas
+    Pista* arvorePistas = NULL;
+    
+    // Adicionar pistas baseadas nas salas
+    arvorePistas = inserirPista(arvorePistas, "Livro de quimica aberto na pagina sobre venenos");
+    arvorePistas = inserirPista(arvorePistas, "Faca com residuos suspeitos na cozinha");
+    arvorePistas = inserirPista(arvorePistas, "Carta de amor rasgada no quarto");
+    arvorePistas = inserirPista(arvorePistas, "Pegadas de barro no jardim");
+    arvorePistas = inserirPista(arvorePistas, "Relogio parado as 3:47 no hall");
+    
+    // Nivel Mestre: Associar pistas com suspeitos
+    inserirHash("Livro de quimica aberto na pagina sobre venenos", "Dr. Smith");
+    inserirHash("Faca com residuos suspeitos na cozinha", "Chef Maria");
+    inserirHash("Carta de amor rasgada no quarto", "Joao Silva");
+    inserirHash("Pegadas de barro no jardim", "Joao Silva");
+    inserirHash("Relogio parado as 3:47 no hall", "Dr. Smith");
+    inserirHash("Livro de quimica aberto na pagina sobre venenos", "Dr. Smith");
+    
+    // Menu principal
+    int opcao;
+    do {
+        printf("\n[MENU] OPCOES DISPONIVEIS:\n");
+        printf("1. Explorar mansao (Arvore Binaria)\n");
+        printf("2. Ver pistas coletadas (Arvore de Busca)\n");
+        printf("3. Ver associacoes pistas-suspeitos (Tabela Hash)\n");
+        printf("4. Encontrar suspeito mais provavel\n");
+        printf("0. Sair\n");
+        printf("Escolha: ");
+        scanf("%d", &opcao);
+        
+        switch(opcao) {
+            case 1:
+                printf("\n[1] EXPLORANDO A MANSAO...\n");
+                explorarSalas(hallEntrada);
+                break;
+            case 2:
+                printf("\n[2] PISTAS COLETADAS (em ordem alfabetica):\n");
+                printf("==========================================\n");
+                listarPistas(arvorePistas);
+                break;
+            case 3:
+                listarAssociacoes();
+                break;
+            case 4:
+                encontrarSuspeitoMaisProvavel();
+                break;
+            case 0:
+                printf("\n[SAINDO] Encerrando Detective Quest...\n");
+                break;
+            default:
+                printf("\n[ERRO] Opcao invalida!\n");
+        }
+    } while (opcao != 0);
 
     return 0;
 }
